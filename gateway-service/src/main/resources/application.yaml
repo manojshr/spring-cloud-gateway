@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      routes:
+        - id: book-route
+          uri: http://localhost:8001
+          predicates:
+            - Path=/movies/**
+          filters:
+            - AddRequestHeader=X-Agent,CloudApp
+            - AddResponseHeader=X-Origin-Country,India
+            - name: Retry
+              args:
+                retries: 3
+                methods: GET
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+            - name: CircuitBreaker
+              args:
+                name: movieService
+                fallbackUri: forward:/movies-fallback
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 10
+            redis-rate-limiter.burstCapacity: 20
+            redis-rate-limiter.requestedTokens: 1
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      movieService:
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 1000
+        register-health-indicator: true
+  timelimiter:
+    instances:
+      movieService:
+        timeout-duration: 5s
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "circuitbreakers"
+
+server:
+  port: 8000
